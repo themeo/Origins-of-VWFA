@@ -32,14 +32,14 @@ import matplotlib.pyplot as plt
 
 import clean_cornets    #custom networks based on the CORnet family from di carlo lab
 ##import analysis     #custom module for analysing models
-import plots        #custom module for plotting
+#import plots        #custom module for plotting
 import ds2          #custom module for datasets
 
 import argparse 
 parser = argparse.ArgumentParser(description='Training')
 parser.add_argument('--model_choice', default='z',
                     help='z for cornet Z,  s for cornet S')
-parser.add_argument('--img_path', default='imagesets',
+parser.add_argument('--img_path', default='/project/3011213.01/imagenet/ILSVRC/Data/CLS-LOC',
                     help='path to ImageNet folder that contains train and val folders')
 parser.add_argument('--wrd_path', default='wordsets2',
                     help='path to word folder that contains train and val folders')
@@ -57,7 +57,7 @@ parser.add_argument('--num_train_items', default=1300,
                     help='number of training items in each category')
 parser.add_argument('--num_val_items', default=50,
                     help='number of validation items in each category')
-parser.add_argument('--num_workers', default=10,
+parser.add_argument('--num_workers', default=20,
                     help='number of workers to load batches in parallel')
 parser.add_argument('--mode', default='pre',
                     help='pre for pre-schooler mode, lit for literate mode')
@@ -65,7 +65,7 @@ parser.add_argument('--max_epochs_pre', default=50, type=int,
                     help='number of epochs to run as pre-schooler - training on images only')
 parser.add_argument('--max_epochs_lit', default=30, type=int,
                     help='number of epochs to run as literate - training on images and words')
-parser.add_argument('--batch_size', default=100, type=int,
+parser.add_argument('--batch_size', default=1200, type=int,
                     help='mini-batch size')
 parser.add_argument('--lr', '--learning_rate', default=.01, type=float,
                     help='initial learning rate')
@@ -93,13 +93,18 @@ def train(mode = FLAGS.mode, restore_path=None, save_path=FLAGS.save_path, plot=
     device = torch.device("cuda:0" if use_cuda else "cpu")
     #device = "cpu"
     torch.backends.cudnn.benchmark = True
+    print(f"Using {device} for training")
 
     if mode == 'pre':
+        print('building pre-schooler model')
+
         # Datasets and Generators
         train_imgset = ds2.ImageDataset(data_path=FLAGS.img_path, folder='train')
         training_gen = data.DataLoader(train_imgset, batch_size=FLAGS.batch_size, shuffle=True, num_workers=FLAGS.num_workers)
         del train_imgset
         gc.collect()
+
+        print('loading validation set')
                 
         val_imgset = ds2.ImageDataset(data_path=FLAGS.img_path, folder='val')
         validation_gen = data.DataLoader(val_imgset, batch_size=FLAGS.num_val_items, shuffle=False, num_workers=FLAGS.num_workers)
@@ -111,7 +116,8 @@ def train(mode = FLAGS.mode, restore_path=None, save_path=FLAGS.save_path, plot=
         max_epochs = FLAGS.max_epochs_pre
         shift_epoch = 0
         print_save = 'saving pre-schooler model'
-        
+
+        print('loading variables')
         # Model
         if FLAGS.model_choice == 'z':
             net = clean_cornets.CORnet_Z_tweak()
@@ -339,3 +345,9 @@ def Acc(out, label, Print=0):
     print ('')
     return score
 
+
+def main():
+    train()
+
+if __name__ == "__main__":
+    main()
