@@ -41,7 +41,7 @@ parser.add_argument('--model_choice', default='z',
                     help='z for cornet Z,  s for cornet S')
 parser.add_argument('--img_path', default='/project/3011213.01/imagenet/ILSVRC/Data/CLS-LOC',
                     help='path to ImageNet folder that contains train and val folders')
-parser.add_argument('--wrd_path', default='wordsets2',
+parser.add_argument('--wrd_path', default='wordsets',
                     help='path to word folder that contains train and val folders')
 parser.add_argument('--save_path', default='save/',
                     help='path for saving ')
@@ -77,6 +77,8 @@ parser.add_argument('--weight_decay', default=1e-4, type=float,
                     help='weight decay ')
 
 FLAGS, _ = parser.parse_known_args()
+main_dir = '/project/3011213.01/Origins-of-VWFA/'
+
 
 # useful
 def secondsToStr(elapsed=None):
@@ -117,12 +119,28 @@ def train(mode = FLAGS.mode, restore_path=None, save_path=FLAGS.save_path, plot=
         shift_epoch = 0
         print_save = 'saving pre-schooler model'
 
-        print('loading variables')
-        # Model
+        # Find latest checkpoint file
+        checkpoint_files = glob.glob(f'{main_dir}/{FLAGS.save_path}/save_pre_z_*_full_nomir.pth.tar')
+        latest_checkpoint_file = max(checkpoint_files, key=os.path.getctime)
+
+        # Extract epoch number from filename
+        last_epoch = int(os.path.splitext(os.path.basename(latest_checkpoint_file))[0].split('_')[-3])
+        print('Last-trained epoch:', last_epoch)
+
+        # Load checkpoint data
+        ckpt_data = torch.load(latest_checkpoint_file)
+        start_epoch = ckpt_data['epoch']  # Set start epoch to the next epoch after the checkpoint
         if FLAGS.model_choice == 'z':
-            net = clean_cornets.CORnet_Z_tweak()
-        if FLAGS.model_choice == 's':
-            net = clean_cornets.CORnet_S_tweak()
+            print('loading pre-schooler model z')
+            net_pre = clean_cornets.CORnet_Z_tweak(out_img=FLAGS.img_classes)
+            net_pre.load_state_dict(ckpt_data['state_dict'])
+            
+        elif FLAGS.model_choice == 's':
+            print('loading pre-schooler model s')
+            net_pre = clean_cornets.CORnet_S_tweak(out_img=FLAGS.img_classes)
+            net_pre.load_state_dict(ckpt_data['state_dict'])
+        net = net_pre
+        print('pre-schooler model has been built')
 
     if 'lit' in mode:
         print ('building literate model')
@@ -139,7 +157,7 @@ def train(mode = FLAGS.mode, restore_path=None, save_path=FLAGS.save_path, plot=
         validation_gen = data.DataLoader(val_set, batch_size=FLAGS.num_val_items, shuffle=False, num_workers=FLAGS.num_workers)
         
         # variables, labels, prints, and titles for plots
-        print ('loading variables')
+        print('loading variables')
         classes = FLAGS.img_classes + FLAGS.wrd_classes
         max_epochs = FLAGS.max_epochs_lit
         cat_scores = np.zeros((FLAGS.max_epochs_pre + FLAGS.max_epochs_lit, classes))
@@ -151,6 +169,9 @@ def train(mode = FLAGS.mode, restore_path=None, save_path=FLAGS.save_path, plot=
 
         shift_epoch = FLAGS.max_epochs_pre
         
+
+        
+
         # Model
         
         if FLAGS.model_choice == 'z':
@@ -180,7 +201,7 @@ def train(mode = FLAGS.mode, restore_path=None, save_path=FLAGS.save_path, plot=
                 net = clean_cornets.CORNet_S_nonbiased_words(net_pre)
                 print_save = 'saving unbiased literate model'
             print ('literate model s has been built')
-        
+
     #use multiple GPUs if available
     if torch.cuda.device_count() > 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
@@ -212,54 +233,12 @@ def train(mode = FLAGS.mode, restore_path=None, save_path=FLAGS.save_path, plot=
     """
     
     # Loop over epochs
-    for epoch in range(max_epochs):
+    for epoch in range(start_epoch+1, max_epochs):
 
         gc.collect()
         # Training
         print ('epoch', shift_epoch + epoch)
         #scheduler.step()
-        
-        if FLAGS.save_path != None:
-            # Save model
-            ckpt_data = {}
-            ckpt_data['epoch'] = shift_epoch + epoch
-            ckpt_data['state_dict'] = net.state_dict()
-            ckpt_data['optimizer'] = optimizer.state_dict()
-            print (print_save)
-            torch.save(ckpt_data, FLAGS.save_path + 'save_'+mode+'_'+FLAGS.model_choice+'_'+str(shift_epoch + epoch)+'_full_nomir.pth.tar') 
-            np.save(save_path + 'cat_scores_'+mode+'_'+FLAGS.model_choice+'_full_nomir.npy',cat_scores)
-            np.save(save_path + 'trainloss_'+mode+'_'+FLAGS.model_choice+'_full_nomir.npy',np.array(trainloss))
-            np.save(save_path + 'valloss_'+mode+'_'+FLAGS.model_choice+'_full_nomir.npy',np.array(valloss))
-            
-        # Validation
-        with torch.set_grad_enabled(False):
-            cat_index = 0
-            for local_batch_val, local_labels_val in validation_gen:
-
-                print ('cat_index',cat_index)
-                
-                # Transfer to GPU
-                local_batch_val, local_labels_val = local_batch_val.to(device), local_labels_val.to(device)
-    
-                # Model computations
-                v1, v2, v4, it, h, pred_val = net(local_batch_val)
-                
-                # Per category acc
-#                print '-->ground truth label:',local_labels_val
-#                print '-->predicted label:',pred_val.numpy()
-                
-                scores = Acc(pred_val, local_labels_val)
-                print ('category accuracy scores', scores)
-                cat_scores[shift_epoch + epoch, cat_index] = scores
-                print ('cat_scores[shift_epoch + epoch, cat_index]',cat_scores[shift_epoch + epoch, cat_index])
-                exec_time = secondsToStr(time.time() - start_time)
-                print ('execution time so far: ',exec_time)
-                cat_index += 1
-                
-                # Compute loss.
-                loss_val = criterion(pred_val, local_labels_val)
-                valloss += [loss_val.item()]
-                
         
         for local_batch, local_labels in training_gen:
             
@@ -279,32 +258,60 @@ def train(mode = FLAGS.mode, restore_path=None, save_path=FLAGS.save_path, plot=
             exec_time = secondsToStr(end_time - start_time)
             print ('execution time so far: ',exec_time)
 
-        
-            optimizer.zero_grad()
-            
             # Backward pass.
+            optimizer.zero_grad()
             loss.backward()
             
             # 1-step gradient descent.
             optimizer.step()
+
+        # Validation
+        with torch.set_grad_enabled(False):
+            cat_index = 0
+            for local_batch_val, local_labels_val in validation_gen:
+
+                # Transfer to GPU
+                local_batch_val, local_labels_val = local_batch_val.to(device), local_labels_val.to(device)
+    
+                # Model computations
+                v1, v2, v4, it, h, pred_val = net(local_batch_val)
+                
+                # Per category acc
+#                print '-->ground truth label:',local_labels_val
+#                print '-->predicted label:',pred_val.numpy()
+                
+                scores = Acc(pred_val, local_labels_val)
+                print (f'category {cat_index} accuracy scores: {scores}')
+                cat_scores[shift_epoch + epoch, cat_index] = scores
+                # exec_time = secondsToStr(time.time() - start_time)
+                # print ('execution time so far: ',exec_time)
+                cat_index += 1
+                
+                # Compute loss.
+                loss_val = criterion(pred_val, local_labels_val)
+                valloss += [loss_val.item()]
+                
+        # Save model
+        if FLAGS.save_path != None:
+            # Save model
+            ckpt_data = {}
+            ckpt_data['epoch'] = shift_epoch + epoch
+            ckpt_data['state_dict'] = net.state_dict()
+            ckpt_data['optimizer'] = optimizer.state_dict()
+            print (print_save)
+
+            torch.save(ckpt_data, f"{FLAGS.save_path}save_{mode}_{FLAGS.model_choice}_{shift_epoch + epoch}_full_nomir.pth.tar")
+            np.save(f"{save_path}cat_scores_{mode}_{FLAGS.model_choice}_{shift_epoch + epoch}_full_nomir.npy", cat_scores)
+            np.save(f"{save_path}trainloss_{mode}_{FLAGS.model_choice}_{shift_epoch + epoch}_full_nomir.npy", np.array(trainloss))
+            np.save(f"{save_path}valloss_{mode}_{FLAGS.model_choice}_{shift_epoch + epoch}_full_nomir.npy", np.array(valloss))
+        
+
             
     end_time = time.time()
     exec_time = secondsToStr(end_time - start_time)
     print ('execution time: ',exec_time)
     
             
-    if FLAGS.save_path != None:
-        # Save model
-        ckpt_data = {}
-        ckpt_data['epoch'] = shift_epoch + epoch
-        ckpt_data['state_dict'] = net.state_dict()
-        ckpt_data['optimizer'] = optimizer.state_dict()
-        print (print_save)
-        torch.save(ckpt_data, FLAGS.save_path + 'save_'+mode+'_'+FLAGS.model_choice+'_'+str(shift_epoch + epoch)+'_full_nomir.pth.tar') 
-        np.save(save_path + 'cat_scores_'+mode+'_'+FLAGS.model_choice+'_full_nomir.npy',cat_scores)
-        np.save(save_path + 'trainloss_'+mode+'_'+FLAGS.model_choice+'_full_nomir.npy',np.array(trainloss))
-        np.save(save_path + 'valloss_'+mode+'_'+FLAGS.model_choice+'_full_nomir.npy',np.array(valloss))
-    
 
 #    """
 #    plot results
@@ -340,9 +347,9 @@ def Acc(out, label, Print=0):
     out, label = out.cpu(), label.cpu()
     out, label = np.argmax(out.detach().numpy(), axis=1), label.numpy()
     score = 100*np.mean(out==label)
-    print ('out', out)
-    print ('label', label)
-    print ('')
+    # print ('out', out)
+    # print ('label', label)
+    # print ('')
     return score
 
 
