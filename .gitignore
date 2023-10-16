@@ -1,0 +1,5 @@
+save/
+fonts/
+__pycache__/
+wordsets/
+*.ttf
