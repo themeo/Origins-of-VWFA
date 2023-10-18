@@ -1,6 +1,6 @@
 
 import subprocess, shlex, shutil, io, os
-import torch, torchvision, glob, tqdm, scipy, gc, time
+import torch, torchvision, glob, tqdm, scipy, gc, time, re
 from time import strftime, localtime
 from datetime import timedelta
 import torch.nn as nn
@@ -23,7 +23,7 @@ import ds2          #custom module for datasets
 
 import argparse 
 parser = argparse.ArgumentParser(description='Training')
-parser.add_argument('--model_choice', default='z',
+parser.add_argument('--model_choice', default='s',
                     help='z for cornet Z,  s for cornet S')
 parser.add_argument('--img_path', default='/project/3011213.01/imagenet/ILSVRC/Data/CLS-LOC',
                     help='path to ImageNet folder that contains train and val folders')
@@ -93,7 +93,7 @@ def Acc(out, label, Print=0):
     return score
 
 
-def train(mode = FLAGS.mode, restore_path=None, save_path=FLAGS.save_path, plot=0, show=0):
+def train(mode = FLAGS.mode, model_choice=FLAGS.model_choice, restore_path=None, save_path=FLAGS.save_path, plot=0, show=0):
     start_time = time.time()
     
     # CUDA for PyTorch
@@ -125,36 +125,32 @@ def train(mode = FLAGS.mode, restore_path=None, save_path=FLAGS.save_path, plot=
         shift_epoch = 0
         print_save = 'saving pre-schooler model'
 
-        # Find latest checkpoint file
-        checkpoint_files = glob.glob(f'{main_dir}/{FLAGS.save_path}/save_pre_z_*_full_nomir.pth.tar')
-        latest_checkpoint_file = max(checkpoint_files, key=os.path.getctime)
+        checkpoint_files = glob.glob(f'{main_dir}/{FLAGS.save_path}/save_{mode}_{model_choice}_*_full_nomir.pth.tar')
+        epochs = [int(re.search(r'_(\d+)_full_nomir.pth.tar', file).group(1)) for file in checkpoint_files]
+        start_epoch = max(epochs) if len(epochs) else -1
+        if start_epoch >= 0:
+            print('Last-trained epoch:', start_epoch)
 
-        # Extract epoch number from filename
-        last_epoch = int(os.path.splitext(os.path.basename(latest_checkpoint_file))[0].split('_')[-3])
-        epoch = last_epoch
-        print('Last-trained epoch:', last_epoch)
+            # Load checkpoint data
+            ckpt_data = torch.load(f'{FLAGS.save_path}/save_{mode}_{model_choice}_{start_epoch}_full_nomir.pth.tar')
+            assert start_epoch == ckpt_data['epoch']
 
-        latest_checkpoint_file = '/project/3011213.01/Origins-of-VWFA/save_pre_z_49_full_nomir.pth.tar'
+            for k in list(ckpt_data['state_dict'].keys()):
+                if 'module' in k:
+                    ckpt_data['state_dict'][k.replace('module.', '')] = ckpt_data['state_dict'].pop(k)
 
-        # Load checkpoint data
-        ckpt_data = torch.load(latest_checkpoint_file)
 
-        for k in list(ckpt_data['state_dict'].keys()):
-            if 'module' in k:
-                ckpt_data['state_dict'][k.replace('module.', '')] = ckpt_data['state_dict'].pop(k)
+        print(f'loading pre-schooler model {model_choice}')
+        if model_choice == 'z':
+            net = clean_cornets.CORnet_Z_tweak(out_img=FLAGS.img_classes)
+        elif model_choice == 's':
+            net = clean_cornets.CORnet_S_tweak(out_img=FLAGS.img_classes)
+        
+        if ckpt_data:        
+            net.load_state_dict(ckpt_data['state_dict'])
 
-        start_epoch = ckpt_data['epoch']  # Set start epoch to the next epoch after the checkpoint
-        if FLAGS.model_choice == 'z':
-            print('loading pre-schooler model z')
-            net_pre = clean_cornets.CORnet_Z_tweak(out_img=FLAGS.img_classes)
-            net_pre.load_state_dict(ckpt_data['state_dict'])
-            
-        elif FLAGS.model_choice == 's':
-            print('loading pre-schooler model s')
-            net_pre = clean_cornets.CORnet_S_tweak(out_img=FLAGS.img_classes)
-            net_pre.load_state_dict(ckpt_data['state_dict'])
-        net = net_pre
         print('pre-schooler model has been built')
+
 
     if 'lit' in mode:
         print ('building literate model')
@@ -182,39 +178,48 @@ def train(mode = FLAGS.mode, restore_path=None, save_path=FLAGS.save_path, plot=
         lim = len(trainloss)
 
         shift_epoch = FLAGS.max_epochs_pre
-        
+
+        # Find latest checkpoint file
+        checkpoint_files = glob.glob(f'{main_dir}/{FLAGS.save_path}/save_{mode}_{model_choice}_*_full_nomir.pth.tar')
+        if not len(checkpoint_files):
+            checkpoint_files = glob.glob(f'{main_dir}/{FLAGS.save_path}/save_pre_{model_choice}_*_full_nomir.pth.tar')
+            last_checkpoint_mode = 'pre'
+        else:
+            last_checkpoint_mode = mode
+
+        epochs = [int(re.search(r'_(\d+)_full_nomir.pth.tar', file).group(1)) for file in checkpoint_files]
+        start_epoch = max(epochs) if len(epochs) else -1
+        print(f'Last-trained epoch: {last_checkpoint_mode}_{start_epoch}')
 
         
-
         # Model
-        
-        if FLAGS.model_choice == 'z':
-            print ('loading pre-schooler model z')
-            net_pre = clean_cornets.CORnet_Z_tweak(out_img=FLAGS.img_classes)
-            ckpt_data = torch.load(FLAGS.save_path + 'save_pre_z_full.pth.tar')
-            start_epoch = ckpt_data['epoch']
+        if model_choice == 'z':
+            net_pre = clean_cornets.CORnet_Z_tweak
+            if mode == 'lit_bias':
+                net = clean_cornets.CORNet_Z_biased_words
+            elif mode == 'lit_no_bias':
+                net = clean_cornets.CORNet_Z_nonbiased_words
+
+        elif model_choice == 's':
+            net_pre = clean_cornets.CORnet_S_tweak
+            if mode == 'lit_bias':
+                net = clean_cornets.CORNet_S_biased_words
+            elif mode == 'lit_no_bias':
+                net = clean_cornets.CORNet_S_nonbiased_words
+
+        if last_checkpoint_mode == 'pre':
+            print(f'loading pre-schooler model {model_choice}')
+            net_pre = net_pre(out_img=FLAGS.img_classes)
+            ckpt_data = torch.load(f'{FLAGS.save_path}/save_pre_{model_choice}_{start_epoch}_full_nomir.pth.tar')
+            assert start_epoch == ckpt_data['epoch']
             net_pre.load_state_dict(ckpt_data['state_dict'])
-            if FLAGS.mode == 'lit_bias':
-                net = clean_cornets.CORNet_Z_biased_words(net_pre)
-                print_save = 'saving biased literate model'
-            if FLAGS.mode == 'lit_no_bias':
-                net = clean_cornets.CORNet_Z_nonbiased_words(net_pre)
-                print_save = 'saving unbiased literate model'
-            print ('literate model z has been built')
-                
-        if FLAGS.model_choice == 's':
-            print ('loading pre-schooler model s')
-            net_pre = clean_cornets.CORnet_S_tweak(out_img=FLAGS.img_classes)
-            ckpt_data = torch.load(FLAGS.save_path + 'save_pre_s_full.pth.tar')
-            start_epoch = ckpt_data['epoch']
-            net_pre.load_state_dict(ckpt_data['state_dict'])
-            if FLAGS.mode == 'lit_bias':
-                net = clean_cornets.CORNet_S_biased_words(net_pre)
-                print_save = 'saving biased literate model'
-            if FLAGS.mode == 'lit_no_bias':
-                net = clean_cornets.CORNet_S_nonbiased_words(net_pre)
-                print_save = 'saving unbiased literate model'
-            print ('literate model s has been built')
+            net = net(net_pre)
+        else:
+            print(f'loading literate model {model_choice}')
+            net = net()
+            ckpt_data = torch.load(f'{FLAGS.save_path}/save_{last_checkpoint_mode}_{model_choice}_{start_epoch}_full_nomir.pth.tar')
+            assert start_epoch == ckpt_data['epoch']
+            net.load_state_dict(ckpt_data['state_dict'])
 
     #use multiple GPUs if available
     if torch.cuda.device_count() > 1:
@@ -263,7 +268,7 @@ def train(mode = FLAGS.mode, restore_path=None, save_path=FLAGS.save_path, plot=
             
             scores = Acc(pred_val, local_labels_val)
             print (f'category {cat_index} accuracy scores: {scores}')
-            cat_scores[shift_epoch + epoch, cat_index] = scores
+            cat_scores[shift_epoch + start_epoch, cat_index] = scores
             # exec_time = secondsToStr(time.time() - start_time)
             # print ('execution time so far: ',exec_time)
             cat_index += 1
@@ -272,7 +277,7 @@ def train(mode = FLAGS.mode, restore_path=None, save_path=FLAGS.save_path, plot=
             loss_val = criterion(pred_val, local_labels_val)
             valloss += [loss_val.item()]
 
-    print(np.mean(cat_scores[shift_epoch + epoch, :]))
+    print(np.mean(cat_scores[shift_epoch + start_epoch, :]))
             
     end_time = time.time()
     exec_time = secondsToStr(end_time - start_time)
