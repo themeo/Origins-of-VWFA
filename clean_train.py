@@ -165,19 +165,6 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
 
         shift_epoch = FLAGS.max_epochs_pre
 
-
-        # Find latest checkpoint file
-        checkpoint_files = glob.glob(f'{FLAGS.save_path}/save_{mode}_{model_choice}_*_full_nomir.pth.tar')
-        if not len(checkpoint_files):
-            checkpoint_files = glob.glob(f'{main_dir}/{FLAGS.save_path}/save_pre_{model_choice}_*_full_nomir.pth.tar')
-            last_checkpoint_mode = 'pre'
-        else:
-            last_checkpoint_mode = mode
-
-        epochs = [int(re.search(r'_(\d+)_full_nomir.pth.tar', file).group(1)) for file in checkpoint_files]
-        start_epoch = max(epochs) if len(epochs) else -1
-        print(f'Last-trained epoch: {last_checkpoint_mode}_{start_epoch}')
-        
         # Model
         if model_choice == 'z':
             net_pre = clean_cornets.CORnet_Z_tweak
@@ -193,12 +180,29 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
             elif mode == 'lit_no_bias':
                 net = clean_cornets.CORNet_S_nonbiased_words
 
+        # Find latest checkpoint file
+        checkpoint_files = glob.glob(f'{FLAGS.save_path}/save_{mode}_{model_choice}_*_full_nomir.pth.tar')
+        if not len(checkpoint_files):
+            checkpoint_files = glob.glob(f'{main_dir}/{FLAGS.save_path}/save_pre_{model_choice}_*_full_nomir.pth.tar')
+            last_checkpoint_mode = 'pre'
+        else:
+            last_checkpoint_mode = mode
+
+        epochs = [int(re.search(r'_(\d+)_full_nomir.pth.tar', file).group(1)) for file in checkpoint_files]
+        start_epoch = max(epochs) if len(epochs) else -1
+
+        
+
         if last_checkpoint_mode == 'pre':
             print(f'loading pre-schooler model {model_choice}')
             net_pre = net_pre(out_img=FLAGS.img_classes)
-            ckpt_data = torch.load(f'{FLAGS.save_path}/save_pre_{model_choice}_{start_epoch}_full_nomir.pth.tar')
-            assert start_epoch == ckpt_data['epoch']
-            net_pre.load_state_dict(ckpt_data['state_dict'])
+            if start_epoch >= 0:
+                ckpt_data = torch.load(f'{FLAGS.save_path}/save_pre_{model_choice}_{start_epoch}_full_nomir.pth.tar')
+                assert start_epoch == ckpt_data['epoch']
+                net_pre.load_state_dict(ckpt_data['state_dict'])
+                print(f'Last-trained epoch: {last_checkpoint_mode}_{start_epoch}')
+            else:
+                print(f'No pre-trained model found, starting from scratch')
             net = net(net_pre)
         else:
             print(f'loading literate model {model_choice}')
