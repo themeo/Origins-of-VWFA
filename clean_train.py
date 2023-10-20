@@ -183,7 +183,7 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
         # Find latest checkpoint file
         checkpoint_files = glob.glob(f'{FLAGS.save_path}/save_{mode}_{model_choice}_*_full_nomir.pth.tar')
         if not len(checkpoint_files):
-            checkpoint_files = glob.glob(f'{main_dir}/{FLAGS.save_path}/save_pre_{model_choice}_*_full_nomir.pth.tar')
+            checkpoint_files = glob.glob(f'{FLAGS.save_path}/save_pre_{model_choice}_*_full_nomir.pth.tar')
             last_checkpoint_mode = 'pre'
         else:
             last_checkpoint_mode = mode
