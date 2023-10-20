@@ -1,5 +1,6 @@
 save/
 fonts/
 __pycache__/
+cat_eval/
 wordsets/
 *.ttf
