@@ -333,10 +333,6 @@ def CreateMiniWordValSet(path_out='wordsets_100cat_100ex/',num_train=100, num_va
 
     return 'done'
 
-def img_target_transform(target, classes=FLAGS.img_classes):
-    onehot = torch.eye(classes)
-    return onehot[target]
-
 def ImageDataset(data_path='imagesets', folder='train', batch_size=2, workers=0):
     dataset = torchvision.datasets.ImageFolder(
         os.path.join(data_path, folder),
@@ -347,13 +343,9 @@ def ImageDataset(data_path='imagesets', folder='train', batch_size=2, workers=0)
             torchvision.transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]),)
-        #target_transform=img_target_transform,)
     return dataset
 
-def phase2_target_transform_logit(target):
-    onehot = torch.eye(FLAGS.img_classes + FLAGS.wrd_classes)
-    return onehot[target + FLAGS.img_classes]
-
+# Ensure that the target classes do not overlap with the img classes
 def phase2_target_transform(target):
     return target + FLAGS.img_classes
 
@@ -369,11 +361,6 @@ def WordDataset(data_path='wordsets', folder='train', batch_size=2, workers=0):
         target_transform=phase2_target_transform,)
     return dataset
 
-def img2_target_transform_logit(target):
-    onehot = torch.eye(2*FLAGS.img_classes)
-    return onehot[target]
-    
-
 def Image2Dataset(data_path='imagesets', folder='train', batch_size=2, workers=0):
     dataset = torchvision.datasets.ImageFolder(
         os.path.join(data_path, folder),
@@ -383,17 +370,4 @@ def Image2Dataset(data_path='imagesets', folder='train', batch_size=2, workers=0
             torchvision.transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]),)
-        #target_transform=img2_target_transform,)
-    return dataset
-
-def Phase2Dataset(data_path='imagesets', folder='train', batch_size=2, workers=0):
-    dataset = torchvision.datasets.ImageFolder(
-        os.path.join(data_path, folder),
-        torchvision.transforms.Compose([
-            torchvision.transforms.RandomResizedCrop(224),
-            #torchvision.transforms.RandomHorizontalFlip(),
-            torchvision.transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]),)
-        #target_transform=phase2_target_transform,)
     return dataset
