@@ -333,41 +333,40 @@ def CreateMiniWordValSet(path_out='wordsets_100cat_100ex/',num_train=100, num_va
 
     return 'done'
 
+# Used for training
 def ImageDataset(data_path='imagesets', folder='train', batch_size=2, workers=0):
     dataset = torchvision.datasets.ImageFolder(
         os.path.join(data_path, folder),
         torchvision.transforms.Compose([
-            torchvision.transforms.RandomResizedCrop(224),
-            #torchvision.transforms.Resize(size=(224, 224)),
-            #torchvision.transforms.RandomHorizontalFlip(),
+            torchvision.transforms.RandomResizedCrop(224, scale=(0.08, 1), ratio=(0.75, 1.3333)),
             torchvision.transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]),)
     return dataset
 
+def ImageDataset_eval(data_path='imagesets', folder='dev', batch_size=2, workers=0):
+    dataset = torchvision.datasets.ImageFolder(
+        os.path.join(data_path, folder),
+        torchvision.transforms.Compose([
+            torchvision.transforms.Resize(256),
+            torchvision.transforms.CenterCrop(224),
+            torchvision.transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),]),
+        )
+    return dataset
+
 # Ensure that the target classes do not overlap with the img classes
-def phase2_target_transform(target):
+def word_target_transform(target):
     return target + FLAGS.img_classes
 
+# Used for literate mode
 def WordDataset(data_path='wordsets', folder='train', batch_size=2, workers=0):
     dataset = torchvision.datasets.ImageFolder(
         os.path.join(data_path, folder),
         torchvision.transforms.Compose([
-            #torchvision.transforms.CenterCrop(224),
-            torchvision.transforms.RandomResizedCrop(224, scale = (0.9,1), ratio= (1,1)),
+            torchvision.transforms.RandomResizedCrop(224, scale=(0.9, 1), ratio=(1, 1)),
             torchvision.transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]),
-        target_transform=phase2_target_transform,)
-    return dataset
-
-def Image2Dataset(data_path='imagesets', folder='train', batch_size=2, workers=0):
-    dataset = torchvision.datasets.ImageFolder(
-        os.path.join(data_path, folder),
-        torchvision.transforms.Compose([
-            torchvision.transforms.RandomResizedCrop(224),
-            #torchvision.transforms.RandomHorizontalFlip(),
-            torchvision.transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]),)
+        target_transform=word_target_transform,)
     return dataset
