@@ -42,7 +42,8 @@ def load_images(files):
     # images = Variable(images)
     return images
 
-net = load_checkpoint('/project/3011213.01/Origins-of-VWFA/save', 'lit_no_bias')
+mode = 'lit_bias' #  'lit_no_bias', 'lit_bias'
+net = load_checkpoint('/project/3011213.01/Origins-of-VWFA/save', mode)
 layers = ['v1', 'v2', 'v4', 'it', 'h', 'out']
 
 acts = defaultdict(list) # dictionary to store activations for each category
@@ -54,7 +55,7 @@ if 0:
 else:
     categories = ['imgs', 'words']
     category_dir['imgs'] = Path('/project/3011213.01/imagenet/ILSVRC/Data/CLS-LOC/val')
-    category_dir['words'] = Path('/project/3011213.01/Origins-of-VWFA/wordsets/val')
+    category_dir['words'] = Path('/project/3011213.01/Origins-of-VWFA/wordsets/test_acts')
 
 
 for cat in categories:
@@ -70,15 +71,26 @@ for cat in categories:
             acts[layer].append(h.detach().numpy())
 
 
+# Find units that are most sensitive to a given category, in each layer
+selective_units = {}
 for layer in layers:
     acts_layer = np.stack(acts[layer]) # stack activations for all categories
-    # Find units that are most sensitive to a given category
     mean_acts = np.mean(acts_layer, axis=1)
     std_acts = np.std(acts_layer, axis=1)
     thr = (mean_acts + 3 * std_acts) # threshold for each unit: mean activation + 3SD
 
     # Find units that are most sensitive to a given category
     for cat in np.arange(len(categories)):
-        print(f'{layer} {categories[cat]}: {np.sum(mean_acts[cat,:] > thr[np.arange(len(categories)) != cat,:].max(axis=0))}')
+        if categories[cat] != 'words':
+            continue
 
+        # Compare with the max threshold activation in all other categories
+        selectivity_filter = mean_acts[cat,:] > thr[np.arange(len(categories)) != cat,:].max(axis=0)
+        print(f'{layer} {categories[cat]}: {np.sum(selectivity_filter)}')
+        selective_units[layer] = np.where(selectivity_filter)[0]  # indices of selective units
 
+        if layer == 'h' and categories[cat] == 'words':
+            print(selective_units[layer])
+
+# Save the indices of word-sensitive units to an .npy file
+np.save(f'/project/3011213.01/Origins-of-VWFA/word_sensitive_units_{mode}.npy', selective_units)
