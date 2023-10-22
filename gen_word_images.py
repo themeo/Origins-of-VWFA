@@ -6,21 +6,22 @@ import os, random, gc
 import numpy as np
 from pathlib import Path
 
+base_dir = Path('/project/3011213.01/Origins-of-VWFA/')
 
-
-def CreateWordSet(path_out=Path('wordsets/'), num_train=100, num_val=50):
+def CreateWordSet(path_out=base_dir / 'wordsets', num_train=100, num_val=50, num_test_acts=100):
     #define words, sizes, fonts
-    words = [line.strip() for line in open('words_dutch_cornet.txt', 'r')]
+    words = [line.strip() for line in open(base_dir / 'words_dutch_cornet.txt', 'r')]
 
     sizes = [40, 50, 60, 70, 80]
     fonts = {'train': ['arial', 'times', 'lcd'], 
-             'val': ['comic', 'cour', 'lcd']}
+             'val': ['comic', 'cour', 'lcd'],
+             'test_acts': ['lcd']}
     xshift = [-50, -40, -30, -20, -10, 0, 10, 20, 30, 40, 50]
     yshift = [-30, -15, 0, 15, 30]
     min_col_diff = 40
     
     #create train and val folders 
-    for m in ['train', 'val']:
+    for m in ['train', 'val', 'test_acts']:
         for f in words:
             target_path = path_out / m / f
             target_path.mkdir(parents=True, exist_ok=True)
@@ -29,11 +30,13 @@ def CreateWordSet(path_out=Path('wordsets/'), num_train=100, num_val=50):
     for w in tqdm(words):
         gc.collect()
         print (w,)
-        for n in range(num_train + num_val):
+        for n in range(num_train + num_val + num_test_acts):
             if n < num_train:
                 stage = 'train'
-            else:
+            elif n < num_train + num_val:
                 stage = 'val'
+            else:
+                stage = 'test_acts'
 
             path = path_out / stage / w
             
@@ -59,9 +62,6 @@ def CreateWordSet(path_out=Path('wordsets/'), num_train=100, num_val=50):
 
             if path != '':
                 img.save(path / f'{n}.jpg')
-
-#53-58
-#27-29
 
 def gen_wordimg_ttf(text='text', fontname='Arial', W=500, H=500, size=24, xshift=0, yshift=0, upper=0, bg=255, fg=0):
     if upper:
@@ -202,8 +202,8 @@ def gen_wordimg_lcd(text='text', W=500, H=500, size=24, xshift=0, yshift=0, bg=2
 
     # Downsampling
     w, h = image_txt.size
-    tgt_h = int(round(size * 0.725 * 1.4)) # *1.4 if match to width (matched to 'E' in Arial)
-    tgt_w = int(round(w*tgt_h/h))
+    tgt_h = int(round(size * 0.725 * 1.4)) # *1.4 if match to width of 'E' in Arial
+    tgt_w = int(round(w * tgt_h / h))
     image_txt_ds = image_txt.resize((tgt_w, tgt_h), Image.Resampling.BILINEAR)
 
     image_canvas = Image.new("RGB", (W, H), color = (bg, bg, bg))
@@ -215,7 +215,7 @@ def gen_wordimg_lcd(text='text', W=500, H=500, size=24, xshift=0, yshift=0, bg=2
 
 
 def main():
-    CreateWordSet(num_train=1300, num_val=50)
+    CreateWordSet(num_train=1300, num_val=50, num_test_acts=1)
 
 if __name__ == "__main__":
     main()
