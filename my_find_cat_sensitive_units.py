@@ -1,6 +1,7 @@
 # Load a checkpoint and find to which category each unit is the most sensitive to (mean activation to a category > 3SD from the mean activation to all other categories)
 
 import numpy as np
+import random
 import torch
 import torchvision.transforms as transforms
 from torch.autograd import Variable
@@ -11,9 +12,12 @@ import clean_cornets    #custom networks based on the CORnet family from di carl
 
 
 # Load the checkpoint
-def load_checkpoint(save_path):
-    net = clean_cornets.CORNet_Z_biased_words()
-    ckpt_data = torch.load(f'{save_path}/save_lit_bias_z_79_full_nomir.pth.tar', map_location=torch.device('cpu'))
+def load_checkpoint(save_path, mode='lit_bias'):
+    if mode == 'lit_bias':
+        net = clean_cornets.CORNet_Z_biased_words()
+    elif mode == 'lit_no_bias':
+        net = clean_cornets.CORNet_Z_nonbiased_words()
+    ckpt_data = torch.load(f'{save_path}/save_{mode}_z_79_full_nomir.pth.tar', map_location=torch.device('cpu'))
     net.load_state_dict(ckpt_data['state_dict'])
     net.eval()
     return net
@@ -26,26 +30,37 @@ transform = transforms.Compose([
 ])
 
 # Load all images from a given directory so they can be later all processed as a batch
-def load_images_from_folder(folder):
+def load_images(files):
     images = []
-    files = (p.resolve() for p in Path(folder).glob("*") if p.suffix in {".jpg", ".JPEG"})
     for filename in files:
         img = Image.open(filename)
         if 'L' in img.getbands():
             img = img.convert('RGB') # convert grayscale images to RGB
         img = transform(img)
         images.append(img)
+    images = torch.stack(images)
+    # images = Variable(images)
     return images
 
-acts = defaultdict(list) # dictionary to store activations for each category
-net = load_checkpoint('/project/3011213.01/Origins-of-VWFA/save')
-categories = ['bodies', 'faces', 'houses', 'tools', 'words']
+net = load_checkpoint('/project/3011213.01/Origins-of-VWFA/save', 'lit_no_bias')
 layers = ['v1', 'v2', 'v4', 'it', 'h', 'out']
 
+acts = defaultdict(list) # dictionary to store activations for each category
+category_dir = {}
+if 0:
+    categories = ['bodies', 'faces', 'houses', 'tools', 'words']
+    for cat in categories:
+        category_dir[cat] = Path(f'/project/3011213.01/Origins-of-VWFA/cat_eval/{cat}')
+else:
+    categories = ['imgs', 'words']
+    category_dir['imgs'] = Path('/project/3011213.01/imagenet/ILSVRC/Data/CLS-LOC/val')
+    category_dir['words'] = Path('/project/3011213.01/Origins-of-VWFA/wordsets/val')
+
+
 for cat in categories:
-    imgs = load_images_from_folder(f'/project/3011213.01/Origins-of-VWFA/cat_eval/{cat}')
-    batch_imgs = torch.stack(imgs)
-    batch_imgs = Variable(batch_imgs)
+    filenames = list(p.resolve() for p in category_dir[cat].glob("**/*") if p.suffix in {".jpg", ".JPEG"})
+    filenames = random.sample(filenames, min(1000, len(filenames)))
+    batch_imgs = load_images(filenames)
 
     # Get activations for all images; process images as one batch
     with torch.no_grad():
