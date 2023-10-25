@@ -17,6 +17,7 @@ import os
 import torch, glob, gc, time, re
 from time import strftime, localtime
 from datetime import timedelta
+from pathlib import Path
 import torch.nn as nn
 import numpy as np
 from torch.utils import data
@@ -38,7 +39,7 @@ parser.add_argument('--img_path', default='/project/3011213.01/imagenet/ILSVRC/D
                     help='path to ImageNet folder that contains train and val folders')
 parser.add_argument('--wrd_path', default='/project/3011213.01/Origins-of-VWFA/wordsets',
                     help='path to word folder that contains train and val folders')
-parser.add_argument('--save_path', default='/project/3011213.01/Origins-of-VWFA/save/',
+parser.add_argument('--save_path', default='save/',
                     help='path for saving ')
 parser.add_argument('--output_path', default='/project/3011213.01/Origins-of-VWFA/activations/',
                     help='path for storing activations')
@@ -72,7 +73,7 @@ parser.add_argument('--weight_decay', default=1e-4, type=float,
                     help='weight decay ')
 
 FLAGS, _ = parser.parse_known_args()
-main_dir = '/project/3011213.01/Origins-of-VWFA/'
+main_dir = Path('/project/3011213.01/Origins-of-VWFA')
 
 
 # useful
@@ -82,9 +83,9 @@ def secondsToStr(elapsed=None):
     else:
         return str(timedelta(seconds=elapsed))
 
-def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.batch_size, restore_path=None, save_path=FLAGS.save_path, plot=0, show=0):
+def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.batch_size, restore_path=None, save_path=main_dir/FLAGS.save_path, plot=0, show=0):
     start_time = time.time()
-    
+
     # CUDA for PyTorch
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -116,14 +117,14 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
 
         # Find latest checkpoint file
 
-        checkpoint_files = glob.glob(f'{main_dir}/{FLAGS.save_path}/save_{mode}_{model_choice}_*_full_nomir.pth.tar')
+        checkpoint_files = glob.glob(f'{save_path}/save_{mode}_{model_choice}_*_full_nomir.pth.tar')
         epochs = [int(re.search(r'_(\d+)_full_nomir.pth.tar', file).group(1)) for file in checkpoint_files]
         start_epoch = max(epochs) if len(epochs) else -1
         if start_epoch >= 0:
             print('Last-trained epoch:', start_epoch)
 
             # Load checkpoint data
-            ckpt_data = torch.load(f'{FLAGS.save_path}/save_{mode}_{model_choice}_{start_epoch}_full_nomir.pth.tar')
+            ckpt_data = torch.load(f'{save_path}/save_{mode}_{model_choice}_{start_epoch}_full_nomir.pth.tar')
             assert start_epoch == ckpt_data['epoch']
 
         print(f'loading pre-schooler model {model_choice}')
@@ -156,10 +157,10 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
         classes = FLAGS.img_classes + FLAGS.wrd_classes
         max_epochs = FLAGS.max_epochs_lit
         cat_scores = np.zeros((FLAGS.max_epochs_pre + FLAGS.max_epochs_lit, classes))
-        cat_scores_pre = np.load(FLAGS.save_path + 'cat_scores_pre_z_full_nomir.npy')
+        cat_scores_pre = np.load(save_path / 'cat_scores_pre_z_full_nomir.npy')
         cat_scores[:FLAGS.max_epochs_pre, :-FLAGS.wrd_classes] = np.copy(cat_scores_pre[:FLAGS.max_epochs_pre])
         print ('np.shape(cat_scores)',np.shape(cat_scores))        
-        # trainloss, valloss = np.load(FLAGS.save_path + 'trainloss_pre_z_full_nomir.npy').tolist(), np.load(FLAGS.save_path + 'valloss_pre_z_full_nomir.npy').tolist()
+        # trainloss, valloss = np.load(save_path / 'trainloss_pre_z_full_nomir.npy').tolist(), np.load(save_path / 'valloss_pre_z_full_nomir.npy').tolist()
         trainloss, valloss = [], []
         lim = len(trainloss)
 
@@ -181,9 +182,9 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
                 net = clean_cornets.CORNet_S_nonbiased_words
 
         # Find latest checkpoint file
-        checkpoint_files = glob.glob(f'{FLAGS.save_path}/save_{mode}_{model_choice}_*_full_nomir.pth.tar')
+        checkpoint_files = glob.glob(f'{save_path}/save_{mode}_{model_choice}_*_full_nomir.pth.tar')
         if not len(checkpoint_files):
-            checkpoint_files = glob.glob(f'{FLAGS.save_path}/save_pre_{model_choice}_*_full_nomir.pth.tar')
+            checkpoint_files = glob.glob(f'{save_path}/save_pre_{model_choice}_*_full_nomir.pth.tar')
             last_checkpoint_mode = 'pre'
         else:
             last_checkpoint_mode = mode
@@ -197,7 +198,7 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
             print(f'loading pre-schooler model {model_choice}')
             net_pre = net_pre(out_img=FLAGS.img_classes)
             if start_epoch >= 0:
-                ckpt_data = torch.load(f'{FLAGS.save_path}/save_pre_{model_choice}_{start_epoch}_full_nomir.pth.tar')
+                ckpt_data = torch.load(f'{save_path}/save_pre_{model_choice}_{start_epoch}_full_nomir.pth.tar')
                 assert start_epoch == ckpt_data['epoch']
                 net_pre.load_state_dict(ckpt_data['state_dict'])
                 print(f'Last-trained epoch: {last_checkpoint_mode}_{start_epoch}')
@@ -207,7 +208,7 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
         else:
             print(f'loading literate model {model_choice}')
             net = net()
-            ckpt_data = torch.load(f'{FLAGS.save_path}/save_{last_checkpoint_mode}_{model_choice}_{start_epoch}_full_nomir.pth.tar')
+            ckpt_data = torch.load(f'{save_path}/save_{last_checkpoint_mode}_{model_choice}_{start_epoch}_full_nomir.pth.tar')
             assert start_epoch == ckpt_data['epoch']
             net.load_state_dict(ckpt_data['state_dict'])
 
@@ -309,17 +310,17 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
                 valloss += [loss_val.item()]
                 
         # Save model
-        if FLAGS.save_path != None:
+        if save_path != None:
             # Save model
             ckpt_data = {}
             ckpt_data['epoch'] = epoch
             ckpt_data['state_dict'] = net.state_dict()
             ckpt_data['optimizer'] = optimizer.state_dict()
 
-            torch.save(ckpt_data, f"{FLAGS.save_path}save_{mode}_{model_choice}_{epoch}_full_nomir.pth.tar")
-            np.save(f"{save_path}cat_scores_{mode}_{model_choice}_{epoch}_full_nomir.npy", cat_scores)
-            np.save(f"{save_path}trainloss_{mode}_{model_choice}_{epoch}_full_nomir.npy", np.array(trainloss))
-            np.save(f"{save_path}valloss_{mode}_{model_choice}_{epoch}_full_nomir.npy", np.array(valloss))
+            torch.save(ckpt_data, f"{save_path}/save_{mode}_{model_choice}_{epoch}_full_nomir.pth.tar")
+            np.save(f"{save_path}/cat_scores_{mode}_{model_choice}_{epoch}_full_nomir.npy", cat_scores)
+            np.save(f"{save_path}/trainloss_{mode}_{model_choice}_{epoch}_full_nomir.npy", np.array(trainloss))
+            np.save(f"{save_path}/valloss_{mode}_{model_choice}_{epoch}_full_nomir.npy", np.array(valloss))
         
 
             
