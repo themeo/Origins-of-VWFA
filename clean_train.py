@@ -269,6 +269,7 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
         scheduler.step(epoch=epoch)
         
         batch_n = 0
+        net.train()
         for local_batch, local_labels in training_gen:
             batch_n += 1
             # Transfer to GPU
@@ -293,6 +294,7 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
             optimizer.step()
 
         # Validation
+        net.eval()
         with torch.set_grad_enabled(False):
             cat_index = 0
             for local_batch_val, local_labels_val in validation_gen:
