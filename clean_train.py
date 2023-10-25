@@ -202,9 +202,11 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
                 assert start_epoch == ckpt_data['epoch']
                 net_pre.load_state_dict(ckpt_data['state_dict'])
                 print(f'Last-trained epoch: {last_checkpoint_mode}_{start_epoch}')
+                net = net(net_pre)
+
             else:
                 print(f'No pre-trained model found, starting from scratch')
-            net = net(net_pre)
+                net = net_pre
         else:
             print(f'loading literate model {model_choice}')
             net = net()
@@ -215,6 +217,13 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
             
         print ('literate model has been built')
                     
+    if model_choice == 'z':
+        step_size = 10
+        learning_rate = 0.01
+    elif model_choice == 's':
+        step_size = 20
+        learning_rate = 0.1
+
 
     #use multiple GPUs if available
     if torch.cuda.device_count() > 1:
@@ -234,12 +243,12 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
     # Build loss function, model and optimizer.
     #criterion = nn.BCEWithLogitsLoss()
     criterion = nn.CrossEntropyLoss()
-            
+
     # Optimizer
-    optimizer = torch.optim.SGD(net.parameters(), lr=FLAGS.lr, momentum=FLAGS.momentum, weight_decay=FLAGS.weight_decay)
+    optimizer = torch.optim.SGD(net.parameters(), lr=learning_rate, momentum=FLAGS.momentum, weight_decay=FLAGS.weight_decay)
 
     #scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma = 0.95)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size)
 
     
     print(f'start_epoch: {start_epoch}')
@@ -257,7 +266,7 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
         gc.collect()
         # Training
         print (f'\n\n\nepoch {epoch}')
-        #scheduler.step()
+        scheduler.step(epoch=epoch)
         
         batch_n = 0
         for local_batch, local_labels in training_gen:
