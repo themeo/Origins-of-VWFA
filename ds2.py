@@ -341,7 +341,8 @@ def ImageDataset(data_path='imagesets', folder='train', batch_size=2, workers=0)
     dataset = torchvision.datasets.ImageFolder(
         os.path.join(data_path, folder),
         torchvision.transforms.Compose([
-            torchvision.transforms.RandomResizedCrop(224, scale=(0.08, 1), ratio=(0.75, 1.3333)),
+            torchvision.transforms.RandomResizedCrop(224),
+            torchvision.transforms.RandomHorizontalFlip(),
             torchvision.transforms.ToTensor(),
             normalize,
         ]),)
