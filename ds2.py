@@ -333,6 +333,9 @@ def CreateMiniWordValSet(path_out='wordsets_100cat_100ex/',num_train=100, num_va
 
     return 'done'
 
+normalize = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                             std=[0.229, 0.224, 0.225])
+
 # Used for training
 def ImageDataset(data_path='imagesets', folder='train', batch_size=2, workers=0):
     dataset = torchvision.datasets.ImageFolder(
@@ -340,7 +343,7 @@ def ImageDataset(data_path='imagesets', folder='train', batch_size=2, workers=0)
         torchvision.transforms.Compose([
             torchvision.transforms.RandomResizedCrop(224, scale=(0.08, 1), ratio=(0.75, 1.3333)),
             torchvision.transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            normalize,
         ]),)
     return dataset
 
@@ -351,7 +354,7 @@ def ImageDataset_eval(data_path='imagesets', folder='dev', batch_size=2, workers
             torchvision.transforms.Resize(256),
             torchvision.transforms.CenterCrop(224),
             torchvision.transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),]),
+            normalize,]),
         )
     return dataset
 
@@ -366,7 +369,7 @@ def WordDataset(data_path='wordsets', folder='train', batch_size=2, workers=0):
         torchvision.transforms.Compose([
             torchvision.transforms.RandomResizedCrop(224, scale=(0.9, 1), ratio=(1, 1)),
             torchvision.transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            normalize,
         ]),
         target_transform=word_target_transform,)
     return dataset
