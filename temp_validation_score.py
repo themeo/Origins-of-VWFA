@@ -132,7 +132,7 @@ def train(mode = FLAGS.mode, model_choice=FLAGS.model_choice, restore_path=None,
             print('Last-trained epoch:', start_epoch)
 
             # Load checkpoint data
-            ckpt_data = torch.load(f'{FLAGS.save_path}/save_{mode}_{model_choice}_{start_epoch}_full_nomir.pth.tar')
+            ckpt_data = torch.load(f'{main_dir}/{FLAGS.save_path}save_{mode}_{model_choice}_{start_epoch}_full_nomir.pth.tar')
             assert start_epoch == ckpt_data['epoch']
 
             for k in list(ckpt_data['state_dict'].keys()):
@@ -252,6 +252,7 @@ def train(mode = FLAGS.mode, model_choice=FLAGS.model_choice, restore_path=None,
     """
     
     # Validation
+    net.eval()
     with torch.set_grad_enabled(False):
         cat_index = 0
         for local_batch_val, local_labels_val in validation_gen:
@@ -260,6 +261,7 @@ def train(mode = FLAGS.mode, model_choice=FLAGS.model_choice, restore_path=None,
             local_batch_val, local_labels_val = local_batch_val.to(device), local_labels_val.to(device)
 
             # Model computations
+            
             v1, v2, v4, it, h, pred_val = net(local_batch_val)
             
             # Per category acc
