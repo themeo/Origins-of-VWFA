@@ -88,20 +88,21 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
     torch.backends.cudnn.benchmark = True
     print(f"Using {device} for training")
 
+
+    # Datasets and Generators
+    print("loading datasets")
+    train_imgset = ds2.ImageDataset(data_path=FLAGS.img_path, folder='train')
+    val_imgset = ds2.ImageDataset_eval(data_path=FLAGS.img_path, folder='val')
+
     if mode == 'pre':
         print('building pre-schooler model')
 
-        # Datasets and Generators
-        train_imgset = ds2.ImageDataset(data_path=FLAGS.img_path, folder='train')
-        training_gen = data.DataLoader(train_imgset, batch_size=batch_size, shuffle=True, num_workers=FLAGS.num_workers, pin_memory=True)
-        del train_imgset
+        training_gen = data.DataLoader(train_imgset, batch_size=batch_size, shuffle=True, num_workers=FLAGS.num_workers, pin_memory=pin_memory)
+        validation_gen = data.DataLoader(val_imgset, batch_size=FLAGS.num_val_items, shuffle=False, num_workers=FLAGS.num_workers, pin_memory=pin_memory)
+
+        del train_imgset, val_imgset
         gc.collect()
 
-        print('loading validation set')
-                
-        val_imgset = ds2.ImageDataset_eval(data_path=FLAGS.img_path, folder='val')
-        validation_gen = data.DataLoader(val_imgset, batch_size=FLAGS.num_val_items, shuffle=False, num_workers=FLAGS.num_workers, pin_memory=True)
-        
         # variables, labels, prints, and titles for plots
         cat_scores = np.zeros((FLAGS.max_epochs_pre, FLAGS.img_classes))
  
@@ -136,16 +137,15 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
     elif 'lit' in mode:
         print ('building literate model')
         # Datasets and Generators
-        print ('loading datasets')
+        print ('loading word datasets')
+        
         train_wrdset = ds2.WordDataset(data_path=FLAGS.wrd_path, folder='train')
-        train_img2set = ds2.ImageDataset(data_path=FLAGS.img_path, folder='train')
-        train_set = torch.utils.data.ConcatDataset((train_img2set,train_wrdset))
-        training_gen = data.DataLoader(train_set, batch_size=FLAGS.batch_size, shuffle=True, num_workers=FLAGS.num_workers, pin_memory=True)
+        train_set = torch.utils.data.ConcatDataset((train_imgset, train_wrdset))
+        training_gen = data.DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=FLAGS.num_workers, pin_memory=pin_memory)
         
         val_wrdset = ds2.WordDataset(data_path=FLAGS.wrd_path, folder='val')
-        val_imgset = ds2.ImageDataset_eval(data_path=FLAGS.img_path, folder='val')
         val_set = torch.utils.data.ConcatDataset((val_imgset, val_wrdset))
-        validation_gen = data.DataLoader(val_set, batch_size=FLAGS.num_val_items, shuffle=False, num_workers=FLAGS.num_workers, pin_memory=True)
+        validation_gen = data.DataLoader(val_set, batch_size=FLAGS.num_val_items, shuffle=False, num_workers=FLAGS.num_workers, pin_memory=pin_memory)
         
         # variables, labels, prints, and titles for plots
         print('loading variables')
