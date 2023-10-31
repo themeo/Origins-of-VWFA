@@ -78,11 +78,13 @@ def secondsToStr(elapsed=None):
 
 def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.batch_size, restore_path=None, save_path=main_dir/FLAGS.save_path, plot=0, show=0):
     start_time = time.time()
+    pin_memory = True
+    non_blocking = True
 
     # CUDA for PyTorch
+    os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:2000'
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
-    #device = "cpu"
     torch.backends.cudnn.benchmark = True
     print(f"Using {device} for training")
 
@@ -200,6 +202,9 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
             else:
                 print(f'No pre-trained model found, starting from scratch')
                 net = net_pre
+
+            del net_pre
+            torch.cuda.empty_cache()
         else:
             print(f'loading literate model {model_choice}')
             net = net()
@@ -267,11 +272,15 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
         batch_n = 0
         net.train()
         for local_batch, local_labels in training_gen:
+            optimizer.zero_grad()
+            torch.cuda.empty_cache()
+
+            # local_batch = local_batch.half()
             batch_n += 1
             # Transfer to GPU
-            local_batch = local_batch.to(device, non_blocking=True)
-            local_labels = local_labels.to(device, non_blocking=True)
-            torch.cuda.empty_cache()
+            local_batch = local_batch.to(device, non_blocking=non_blocking)
+            local_labels = local_labels.to(device, non_blocking=non_blocking)
+
             # Model computations
             # Forward pass.
             if 0:
