@@ -76,7 +76,7 @@ def secondsToStr(elapsed=None):
     else:
         return str(timedelta(seconds=elapsed))
 
-def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.batch_size, restore_path=None, save_path=main_dir/FLAGS.save_path, plot=0, show=0):
+def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.batch_size, save_path=main_dir/FLAGS.save_path):
     start_time = time.time()
     pin_memory = True
     non_blocking = True
@@ -157,7 +157,6 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
         # print ('np.shape(cat_scores)',np.shape(cat_scores))        
         # trainloss, valloss = np.load(save_path / 'trainloss_pre_z_full_nomir.npy').tolist(), np.load(save_path / 'valloss_pre_z_full_nomir.npy').tolist()
         trainloss, valloss = [], []
-        lim = len(trainloss)
 
         shift_epoch = FLAGS.max_epochs_pre
 
@@ -187,8 +186,6 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
         epochs = [int(re.search(r'_(\d+)_full_nomir.pth.tar', file).group(1)) for file in checkpoint_files]
         start_epoch = max(epochs) if len(epochs) else -1
 
-        
-
         if last_checkpoint_mode == 'pre':
             print(f'loading pre-schooler model {model_choice}')
             net_pre = net_pre(out_img=FLAGS.img_classes)
@@ -197,7 +194,7 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
                 assert start_epoch == ckpt_data['epoch']
                 net_pre.load_state_dict(ckpt_data['state_dict'])
                 print(f'Last-trained epoch: {last_checkpoint_mode}_{start_epoch}')
-                net = net(net_pre)
+                net = net(net_pre, out_img=FLAGS.img_classes, out_wrd=FLAGS.wrd_classes)
 
             else:
                 print(f'No pre-trained model found, starting from scratch')
@@ -207,11 +204,10 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
             torch.cuda.empty_cache()
         else:
             print(f'loading literate model {model_choice}')
-            net = net()
-            ckpt_data = torch.load(f'{save_path}/save_{last_checkpoint_mode}_{model_choice}_{start_epoch}_full_nomir.pth.tar')
+            net = net(out_img=FLAGS.img_classes, out_wrd=FLAGS.wrd_classes)
+            ckpt_data = torch.load(f'{save_path}/save_{last_checkpoint_mode}_{model_choice}_{start_epoch}_full_nomir.pth.tar', map_location=torch.device(device))
             assert start_epoch == ckpt_data['epoch']
             net.load_state_dict(ckpt_data['state_dict'])
-
             
         print ('literate model has been built')
                     
@@ -230,13 +226,9 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
     
     #transfer model to device
     net.to(device)
-        
-#    if device != "cpu":
-#        net.cuda()
-    
 
     exec_time = secondsToStr(time.time() - start_time)
-    print ('execution time so far: ',exec_time)
+    print('execution time so far: ',exec_time)
     
     # Build loss function, model and optimizer.
     #criterion = nn.BCEWithLogitsLoss()
