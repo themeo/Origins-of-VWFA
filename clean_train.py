@@ -9,6 +9,8 @@ Created on Wed Feb 7 2020
 
 import os
 import torch, glob, gc, time, re
+from torch.cuda.amp import autocast, GradScaler
+
 from time import strftime, localtime
 from datetime import timedelta
 from pathlib import Path
@@ -233,10 +235,13 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
     
     # Build loss function, model and optimizer.
     #criterion = nn.BCEWithLogitsLoss()
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss().cuda()
 
     # Optimizer
-    optimizer = torch.optim.SGD(net.parameters(), lr=learning_rate, momentum=FLAGS.momentum, weight_decay=FLAGS.weight_decay)
+    optimizer = torch.optim.SGD(net.parameters(), lr=learning_rate, 
+                                momentum=FLAGS.momentum, weight_decay=FLAGS.weight_decay)
+
+    scaler = GradScaler()
 
     #scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma = 0.95)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size)
@@ -269,20 +274,33 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
             torch.cuda.empty_cache()
             # Model computations
             # Forward pass.
-            v1, v2, v4, it, h, pred = net(local_batch)
-            # pred = nn.Softmax(linear_im(local_batch))
-            
-            # Compute loss.
-            loss = criterion(pred, local_labels)
-            trainloss += [loss.item()]
-            print (f'epoch: {epoch}, batch_n: {batch_n}, loss: {loss.item():.2f}, exec_time: {secondsToStr(time.time() - start_time)}')
+            if 0:
+                v1, v2, v4, it, h, pred = net(local_batch)
+                
+                # Compute loss.
+                loss = criterion(pred, local_labels)
+                trainloss += [loss.item()]
+            else:
+                with autocast():
+                    v1, v2, v4, it, h, pred = net(local_batch)
+                    
+                    # Compute loss.
+                    loss = criterion(pred, local_labels)
+                    trainloss += [loss.item()]
+            print(f'epoch: {epoch}, batch_n: {batch_n}, loss: {loss.item():.2f}, exec_time: {secondsToStr(time.time() - start_time)}')
 
             # Backward pass.
-            optimizer.zero_grad()
-            loss.backward()
-            
-            # 1-step gradient descent.
-            optimizer.step()
+            if 0:
+                loss.backward()
+                optimizer.step()
+            else:
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+
+            del local_batch, local_labels
+            torch.cuda.empty_cache()
+
 
         # Validation
         net.eval()
