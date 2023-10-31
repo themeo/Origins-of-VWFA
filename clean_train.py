@@ -6,12 +6,6 @@ Created on Wed Feb 7 2020
 @author: Thomas
 """
 
-"""
-useful when loading on mac:
->>> keys = list(ckpt_data['state_dict'].keys())
->>> for name in keys:
-	ckpt_data['state_dict'][name[7:]] = ckpt_data['state_dict'].pop(name)
-"""
 
 import os
 import torch, glob, gc, time, re
@@ -21,14 +15,11 @@ from pathlib import Path
 import torch.nn as nn
 import numpy as np
 from torch.utils import data
-from scipy.spatial.distance import pdist, squareform
 from PIL import Image, ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 Image.warnings.simplefilter('ignore')
 
 import clean_cornets    #custom networks based on the CORnet family from di carlo lab
-##import analysis     #custom module for analysing models
-#import plots        #custom module for plotting
 import ds2          #custom module for datasets
 
 import argparse 
@@ -157,9 +148,9 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
         classes = FLAGS.img_classes + FLAGS.wrd_classes
         max_epochs = FLAGS.max_epochs_lit
         cat_scores = np.zeros((FLAGS.max_epochs_pre + FLAGS.max_epochs_lit, classes))
-        cat_scores_pre = np.load(save_path / 'cat_scores_pre_z_full_nomir.npy')
-        cat_scores[:FLAGS.max_epochs_pre, :-FLAGS.wrd_classes] = np.copy(cat_scores_pre[:FLAGS.max_epochs_pre])
-        print ('np.shape(cat_scores)',np.shape(cat_scores))        
+        # cat_scores_pre = np.load(save_path / f'cat_scores_pre_{model_choice}_{}_full_nomir.npy')
+        # cat_scores[:FLAGS.max_epochs_pre, :-FLAGS.wrd_classes] = np.copy(cat_scores_pre[:FLAGS.max_epochs_pre])
+        # print ('np.shape(cat_scores)',np.shape(cat_scores))        
         # trainloss, valloss = np.load(save_path / 'trainloss_pre_z_full_nomir.npy').tolist(), np.load(save_path / 'valloss_pre_z_full_nomir.npy').tolist()
         trainloss, valloss = [], []
         lim = len(trainloss)
@@ -177,7 +168,7 @@ def train(mode=FLAGS.mode, model_choice=FLAGS.model_choice, batch_size=FLAGS.bat
         elif model_choice == 's':
             net_pre = clean_cornets.CORnet_S_tweak
             if mode == 'lit_bias':
-                net = clean_cornets.CORNet_S_biased_words
+                net = clean_cornets.CORnet_S_biased_words
             elif mode == 'lit_no_bias':
                 net = clean_cornets.CORNet_S_nonbiased_words
 
