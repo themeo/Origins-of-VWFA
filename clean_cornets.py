@@ -140,7 +140,6 @@ def CORnet_Z():
 
 # Easier model to use, straigthforwardly returns all the activations of each layer    
 class CORnet_Z_tweak(nn.Module):
-   
         def __init__(self, out_img=1000, out_wrd=0):
                 super(CORnet_Z_tweak, self).__init__()
 
@@ -238,10 +237,10 @@ class CORNet_Z_nonbiased_words(nn.Module):
                 super(CORNet_Z_nonbiased_words, self).__init__()
                 # Ventral
                 if init_model == None:
-                    self.V1 = CORblock_Z(3, 64, kernel_size=7, stride=2)
-                    self.V2 = CORblock_Z(64, 128)
-                    self.V4 = CORblock_Z(128, 256)
-                    self.IT = CORblock_Z(256, 512)
+                        self.V1 = CORblock_Z(3, 64, kernel_size=7, stride=2)
+                        self.V2 = CORblock_Z(64, 128)
+                        self.V4 = CORblock_Z(128, 256)
+                        self.IT = CORblock_Z(256, 512)
                 if init_model != None:
                         self.V1 = init_model.V1
                         self.V2 = init_model.V2
@@ -281,7 +280,286 @@ class CORNet_Z_nonbiased_words(nn.Module):
                         return v1, v2, v4, it, h, out
                 return self.flatten(v1), self.flatten(v2), self.flatten(v4), self.flatten(it), h, out
   
+"""
+------------------------------------------------
+------------------------------------------------
+Cornet_S models
+------------------------------------------------
+------------------------------------------------
+"""
+ 
+         
+"""
+Basic block for CORnet S
+"""
+
+class CORblock_S(nn.Module):
+        scale = 4  # scale of the bottleneck convolution channels
+
+        def __init__(self, in_channels, out_channels, times=1):
+                super().__init__()
+
+                self.times = times
+
+                self.conv_input = nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
+                self.skip = nn.Conv2d(out_channels, out_channels,
+                                        kernel_size=1, stride=2, bias=False)
+                self.norm_skip = nn.BatchNorm2d(out_channels)
+
+                self.conv1 = nn.Conv2d(out_channels, out_channels * self.scale,
+                                        kernel_size=1, bias=False)
+                self.nonlin1 = nn.ReLU(inplace=True)
+
+                self.conv2 = nn.Conv2d(out_channels * self.scale, out_channels * self.scale,
+                                        kernel_size=3, stride=2, padding=1, bias=False)
+                self.nonlin2 = nn.ReLU(inplace=True)
+
+                self.conv3 = nn.Conv2d(out_channels * self.scale, out_channels,
+                                        kernel_size=1, bias=False)
+                self.nonlin3 = nn.ReLU(inplace=True)
+
+                self.output = Identity()
+
+                # need BatchNorm for each time step for training to work well
+                for t in range(self.times):
+                        setattr(self, f'norm1_{t}', nn.BatchNorm2d(out_channels * self.scale))
+                        setattr(self, f'norm2_{t}', nn.BatchNorm2d(out_channels * self.scale))
+                        setattr(self, f'norm3_{t}', nn.BatchNorm2d(out_channels))
+
+        def forward(self, inp):
+                x = self.conv_input(inp)
+
+                for t in range(self.times):
+                        if t == 0:
+                                skip = self.norm_skip(self.skip(x))
+                                self.conv2.stride = (2, 2)
+                        else:
+                                skip = x
+                                self.conv2.stride = (1, 1)
+
+                        x = self.conv1(x)
+                        x = getattr(self, f'norm1_{t}')(x)
+                        x = self.nonlin1(x)
+
+                        x = self.conv2(x)
+                        x = getattr(self, f'norm2_{t}')(x)
+                        x = self.nonlin2(x)
+
+                        x = self.conv3(x)
+                        x = getattr(self, f'norm3_{t}')(x)
+
+                        x += skip
+                        x = self.nonlin3(x)
+                        output = self.output(x)
+
+                return output
+
+
+def CORnet_S():
+        model = nn.Sequential(OrderedDict([
+                ('V1', nn.Sequential(OrderedDict([  # this one is custom to save GPU memory
+                        ('conv1', nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
+                                        bias=False)),
+                        ('norm1', nn.BatchNorm2d(64)),
+                        ('nonlin1', nn.ReLU(inplace=True)),
+                        ('pool', nn.MaxPool2d(kernel_size=3, stride=2, padding=1)),
+                        ('conv2', nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1,
+                                        bias=False)),
+                        ('norm2', nn.BatchNorm2d(64)),
+                        ('nonlin2', nn.ReLU(inplace=True)),
+                        ('output', Identity())
+                ]))),
+                ('V2', CORblock_S(64, 128, times=2)),
+                ('V4', CORblock_S(128, 256, times=4)),
+                ('IT', CORblock_S(256, 512, times=2)),
+                ('decoder', nn.Sequential(OrderedDict([
+                        ('avgpool', nn.AdaptiveAvgPool2d(1)),
+                        ('flatten', Flatten()),
+                        ('linear', nn.Linear(512, 1000)),
+                        ('output', Identity())
+                        ])))
+        ]))
+
+        # weight initialization
+        for m in model.modules():
+                if isinstance(m, nn.Conv2d):
+                        n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                        m.weight.data.normal_(0, math.sqrt(2. / n))
+                # nn.Linear is missing here because I originally forgot 
+                # to add it during the training of this network
+                elif isinstance(m, nn.BatchNorm2d):
+                        m.weight.data.fill_(1)
+                        m.bias.data.zero_()
+
+        return model
+
+
+# Easier model to use, straigthforwardly returns all the activations of each layer    
+class CORnet_S_tweak(nn.Module):
+        def __init__(self, out_img=1000, out_wrd=0):
+                super(CORnet_S_tweak, self).__init__()
+
+                self.V1 = nn.Sequential(OrderedDict([
+                        ('conv1', nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
+                                        bias=False)),
+                        ('norm1', nn.BatchNorm2d(64)),
+                        ('nonlin1', nn.ReLU()),
+                        ('pool', nn.MaxPool2d(kernel_size=3, stride=2, padding=1)),
+                        ('conv2', nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1,
+                                        bias=False)),
+                        ('norm2', nn.BatchNorm2d(64)),
+                        ('nonlin2', nn.ReLU()),
+                        ('output', Identity())
+                ]))
+                self.V2 = CORblock_S(64, 128, times=2)
+                self.V4 = CORblock_S(128, 256, times=4)
+                self.IT = CORblock_S(256, 512, times=2)
+
+                # Decoder
+                self.avgpool = nn.AdaptiveAvgPool2d(1)
+                self.flatten = Flatten()
+                # self.softmax = nn.Softmax() #  JS: not used
+                # self.sigmoid = nn.Sigmoid() #  JS: not used
+                # self.output = Identity() #  JS: not used
+                self.decoder = nn.Sequential(OrderedDict([
+                        ('linear', nn.Linear(512, out_img + out_wrd)),
+                        ('output', Identity())
+                        ]))
+                
+                # JS: Weight initialization; He initialization was done for Conv2d, added it for Linear
+                for m in self.modules():
+                        if isinstance(m, nn.Conv2d):
+                                nn.init.kaiming_uniform_(m.weight, mode='fan_in', nonlinearity='relu')
+                                if m.bias is not None:
+                                        m.bias.data.zero_()
+                        elif isinstance(m, nn.Linear):
+                                nn.init.kaiming_uniform_(m.weight, mode='fan_in', nonlinearity='relu')
+                                if m.bias is not None:
+                                        m.bias.data.zero_()
+                        elif isinstance(m, nn.BatchNorm2d):
+                                m.weight.data.fill_(1)
+                                m.bias.data.zero_()
+
+        def forward(self, image):
+                # Image
+                v1 = self.V1(image)
+                v2 = self.V2(v1)
+                v4 = self.V4(v2)
+                it = self.IT(v4)
+
+                # decoder
+                h = self.avgpool(it)
+                h = self.flatten(h)
+                out = self.decoder(h)
+                        
+                return self.flatten(v1), self.flatten(v2), self.flatten(v4), self.flatten(it), h, out
+       
+## Simplified biased word model with easily accessible activations
+class CORnet_S_biased_words(nn.Module):
+        def __init__(self, init_model=None):
+                super(CORnet_S_biased_words, self).__init__()
+                if init_model == None:
+                        self.V1 = nn.Sequential(OrderedDict([
+                                ('conv1', nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
+                                                bias=False)),
+                                ('norm1', nn.BatchNorm2d(64)),
+                                ('nonlin1', nn.ReLU()),
+                                ('pool', nn.MaxPool2d(kernel_size=3, stride=2, padding=1)),
+                                ('conv2', nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1,
+                                                bias=False)),
+                                ('norm2', nn.BatchNorm2d(64)),
+                                ('nonlin2', nn.ReLU()),
+                                ('output', Identity())
+                        ]))
+                        self.V2 = CORblock_S(64, 128, times=2)
+                        self.V4 = CORblock_S(128, 256, times=4)
+                        self.IT = CORblock_S(256, 512, times=2)
+                else:
+                        self.V1 = init_model.V1
+                        self.V2 = init_model.V2
+                        self.V4 = init_model.V4
+                        self.IT = init_model.IT
+
+                # Decoder
+                self.avgpool = nn.AdaptiveAvgPool2d(1)
+                self.flatten = Flatten()
+                self.bilinear = Bi_linear(in_img=512, out_img=1000, in_wrd=49, out_wrd=1000)
                 # self.softmax = nn.Softmax()
                 # self.sigmoid = nn.Sigmoid()
                 # self.output = Identity()
 
+                if init_model != None:
+                    # Initializing the hidden-to-image linear network with weights taken from the previous model
+                    self.bilinear.lin_img.weight.data = init_model._modules['decoder']._modules['linear'].weight.data
+                    self.bilinear.lin_img.bias.data = init_model._modules['decoder']._modules['linear'].bias.data
+
+
+        def forward(self, image):
+                # Image
+                v1 = self.V1(image)
+                v2 = self.V2(v1)
+                v4 = self.V4(v2)
+                it = self.IT(v4)
+
+                # decoder
+                h = self.avgpool(it)
+                h = self.flatten(h)
+                out = self.bilinear(h)
+                        
+                return self.flatten(v1), self.flatten(v2), self.flatten(v4), self.flatten(it), h, out
+
+## Simplified non-biased word model with easily accessible activations
+class CORNet_S_nonbiased_words(nn.Module):
+        def __init__(self, init_model=None, n_hid=512, out_img=1000, out_wrd=1000):
+                super(CORNet_S_nonbiased_words, self).__init__()
+
+                # Ventral
+                if init_model == None:
+                        self.V1 = nn.Sequential(OrderedDict([
+                                ('conv1', nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
+                                                bias=False)),
+                                ('norm1', nn.BatchNorm2d(64)),
+                                ('nonlin1', nn.ReLU()),
+                                ('pool', nn.MaxPool2d(kernel_size=3, stride=2, padding=1)),
+                                ('conv2', nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1,
+                                                bias=False)),
+                                ('norm2', nn.BatchNorm2d(64)),
+                                ('nonlin2', nn.ReLU()),
+                                ('output', Identity())
+                        ]))
+                        self.V2 = CORblock_S(64, 128, times=2)
+                        self.V4 = CORblock_S(128, 256, times=4)
+                        self.IT = CORblock_S(256, 512, times=2)
+                else:
+                        self.V1 = init_model.V1
+                        self.V2 = init_model.V2
+                        self.V4 = init_model.V4
+                        self.IT = init_model.IT
+
+                # Decoder
+                self.avgpool = nn.AdaptiveAvgPool2d(1)
+                self.flatten = Flatten()
+                self.linear = nn.Linear(n_hid, out_img+out_wrd)
+                # self.softmax = nn.Softmax()
+                # self.sigmoid = nn.Sigmoid()
+                # self.output = Identity()
+
+                if init_model != None:
+                        # Initializing the hidden-to-image linear network with weights taken from the previous model
+                        self.linear.weight.data[:out_img, :] = init_model._modules['decoder']._modules['linear'].weight.data
+                        self.linear.bias.data[:out_img] = init_model._modules['decoder']._modules['linear'].bias.data
+
+
+        def forward(self, image):
+                # Image
+                v1 = self.V1(image)
+                v2 = self.V2(v1)
+                v4 = self.V4(v2)
+                it = self.IT(v4)
+
+                # decoder
+                h = self.avgpool(it)
+                h = self.flatten(h)
+                out = self.linear(h)
+                        
+                return self.flatten(v1), self.flatten(v2), self.flatten(v4), self.flatten(it), h, out
