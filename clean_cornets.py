@@ -457,7 +457,7 @@ class CORnet_S_tweak(nn.Module):
        
 ## Simplified biased word model with easily accessible activations
 class CORnet_S_biased_words(nn.Module):
-        def __init__(self, init_model=None):
+        def __init__(self, init_model=None, out_img=1000, out_wrd=1000):
                 super(CORnet_S_biased_words, self).__init__()
                 if init_model == None:
                         self.V1 = nn.Sequential(OrderedDict([
@@ -484,7 +484,7 @@ class CORnet_S_biased_words(nn.Module):
                 # Decoder
                 self.avgpool = nn.AdaptiveAvgPool2d(1)
                 self.flatten = Flatten()
-                self.bilinear = Bi_linear(in_img=512, out_img=1000, in_wrd=49, out_wrd=1000)
+                self.bilinear = Bi_linear(in_img=512, out_img=out_img, in_wrd=49, out_wrd=out_wrd)
                 # self.softmax = nn.Softmax()
                 # self.sigmoid = nn.Sigmoid()
                 # self.output = Identity()
