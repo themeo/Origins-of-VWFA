@@ -4,3 +4,4 @@ __pycache__/
 cat_eval/
 wordsets/
 *.ttf
+*.npy
