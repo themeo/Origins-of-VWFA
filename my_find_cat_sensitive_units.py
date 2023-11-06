@@ -12,12 +12,18 @@ import clean_cornets    #custom networks based on the CORnet family from di carl
 
 
 # Load the checkpoint
-def load_checkpoint(save_path, mode='lit_bias'):
+def load_checkpoint(save_path, model_choice='z', mode='lit_bias'):
     if mode == 'lit_bias':
-        net = clean_cornets.CORNet_Z_biased_words()
+        if model_choice == 'z':
+            net = clean_cornets.CORNet_Z_biased_words()
+        elif model_choice == 's':
+            net = clean_cornets.CORnet_S_biased_words()
     elif mode == 'lit_no_bias':
-        net = clean_cornets.CORNet_Z_nonbiased_words()
-    ckpt_data = torch.load(f'{save_path}/save_{mode}_z_79_full_nomir.pth.tar', map_location=torch.device('cpu'))
+        if model_choice == 'z':
+            net = clean_cornets.CORNet_Z_nonbiased_words()
+        elif model_choice == 's':
+            net = clean_cornets.CORNet_S_nonbiased_words()
+    ckpt_data = torch.load(f'{save_path}/save_{mode}_{model_choice}_79_full_nomir.pth.tar', map_location=torch.device('cpu'))
     net.load_state_dict(ckpt_data['state_dict'])
     net.eval()
     return net
@@ -43,7 +49,8 @@ def load_images(files):
     return images
 
 mode = 'lit_bias' #  'lit_no_bias', 'lit_bias'
-net = load_checkpoint('/project/3011213.01/Origins-of-VWFA/save', mode)
+model_choice = 's'
+net = load_checkpoint('/project/3011213.01/Origins-of-VWFA/save', mode=mode, model_choice=model_choice)
 layers = ['v1', 'v2', 'v4', 'it', 'h', 'out']
 
 acts = defaultdict(list) # dictionary to store activations for each category
@@ -93,4 +100,4 @@ for layer in layers:
             print(selective_units[layer])
 
 # Save the indices of word-sensitive units to an .npy file
-np.save(f'/project/3011213.01/Origins-of-VWFA/word_sensitive_units_{mode}.npy', selective_units)
+np.save(f'/project/3011213.01/Origins-of-VWFA/word_sensitive_units_{mode}_{model_choice}.npy', selective_units)
